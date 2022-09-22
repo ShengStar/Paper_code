@@ -39,7 +39,7 @@ class PointPillarScatter(nn.Module):
         self.rl = nn.ReLU()
         self.topk_score = nn.Linear(64, 1, bias=True)
         self.nm_score = nn.BatchNorm1d(1)
-        self.rl_score = nn.ReLU()
+        self.rl_score = nn.Sigmoid()
         # topk
 
 
@@ -74,7 +74,7 @@ class PointPillarScatter(nn.Module):
             score = self.rl_score(score).squeeze()
             # print(score.shape)
             # torch.topk(input, k, dim=None, largest=True, sorted=True, *, out=None)  
-            top_score,index= torch.topk(score,2048,largest=False)
+            top_score,index= torch.topk(score,2048,largest=True)
             mask = indices == indices
             mask[index] = False
             # print("1111111111")

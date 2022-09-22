@@ -101,9 +101,14 @@ class AnchorHeadTemplate(nn.Module):
     def get_pillars_cls_loss(self):
         pillars_labels = self.forward_ret_dict['batch_reduce_cls']
         pillars_preds = self.forward_ret_dict['batch_reduce_pre']
+        
         mask = pillars_labels ==-1
         pillars_labels[mask] = 1
         pillars_labels[~mask] = 0
+        print("!!!!!!!!!!")
+        print(pillars_preds)
+        print(pillars_labels)
+
         batch_size = int(pillars_preds.shape[0])
         cared = pillars_labels >= 0  # [N, num_anchors]
         # 取出背景pillar,背景pillar为-1
@@ -258,10 +263,10 @@ class AnchorHeadTemplate(nn.Module):
         tb_dict.update(tb_dict_pillar)
 
         rpn_loss = cls_loss + box_loss + pillar_loss
-        print("rpn_loss",rpn_loss)
-        print("cls_loss",cls_loss)
-        print("box_loss",box_loss)
-        print("pillar_loss",pillar_loss)
+        # print("rpn_loss",rpn_loss)
+        # print("cls_loss",cls_loss)
+        # print("box_loss",box_loss)
+        # print("pillar_loss",pillar_loss)
 
         tb_dict['rpn_loss'] = rpn_loss.item()
         return rpn_loss, tb_dict
