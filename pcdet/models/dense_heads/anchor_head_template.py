@@ -97,6 +97,42 @@ class AnchorHeadTemplate(nn.Module):
             self.anchors, gt_boxes
         )
         return targets_dict
+    # 获得pillars分类
+    def get_pillars_cls_loss(self):
+        pillars_labels = self.forward_ret_dict['batch_reduce_cls']
+        pillars_preds = self.forward_ret_dict['batch_reduce_pre']
+        mask = pillars_labels ==-1
+        pillars_labels[mask] = 1
+        pillars_labels[~mask] = 0
+        batch_size = int(pillars_preds.shape[0])
+        cared = pillars_labels >= 0  # [N, num_anchors]
+        # 取出背景pillar,背景pillar为-1
+        positives = (pillars_labels > 0)
+        # 前景点分类权重置0
+        negative_cls_weights = (pillars_labels == 0) * 1.0
+        # 前景点分类权重置0
+        cls_weights = (negative_cls_weights + 1.0 * positives).float()
+        # 使用背景点的个数来normalize，使得一批数据中每个前景点贡献的loss一样
+        pos_normalizer = positives.sum(dim=0).float()
+        reg_weights = positives.float()
+        # 正则化每个类别分类损失权重
+        cls_weights /= torch.clamp(pos_normalizer, min=1.0)
+        reg_weights /= torch.clamp(pos_normalizer, min=1.0)
+        cls_targets = pillars_labels * cared.type_as(pillars_labels)
+        cls_targets = cls_targets.unsqueeze(dim=-1)
+        cls_targets = cls_targets.squeeze(dim=-1)
+        one_hot_targets = torch.zeros(*list(cls_targets.shape), 2, dtype=pillars_preds.dtype, device=cls_targets.device)
+        one_hot_targets.scatter_(-1, cls_targets.unsqueeze(dim=-1).long(), 1.0)
+        one_hot_targets = one_hot_targets[..., 1:]
+        pillars_preds = pillars_preds.view(batch_size, -1, 1)
+        cls_loss_src = self.cls_loss_func(pillars_preds, one_hot_targets, weights=cls_weights)  # [N, M]
+        cls_loss = cls_loss_src.sum() / batch_size
+        cls_loss = cls_loss * 1.0
+        tb_dict = {
+            'pillars_loss_cls': cls_loss.item()
+        }
+        return cls_loss, tb_dict
+
 
     def get_cls_layer_loss(self):
         cls_preds = self.forward_ret_dict['cls_preds']
@@ -216,8 +252,16 @@ class AnchorHeadTemplate(nn.Module):
     def get_loss(self):
         cls_loss, tb_dict = self.get_cls_layer_loss()
         box_loss, tb_dict_box = self.get_box_reg_layer_loss()
+        pillar_loss, tb_dict_pillar = self.get_pillars_cls_loss()
+
         tb_dict.update(tb_dict_box)
-        rpn_loss = cls_loss + box_loss
+        tb_dict.update(tb_dict_pillar)
+
+        rpn_loss = cls_loss + box_loss + pillar_loss
+        print("rpn_loss",rpn_loss)
+        print("cls_loss",cls_loss)
+        print("box_loss",box_loss)
+        print("pillar_loss",pillar_loss)
 
         tb_dict['rpn_loss'] = rpn_loss.item()
         return rpn_loss, tb_dict

@@ -40,6 +40,8 @@ class AnchorHeadSingle(AnchorHeadTemplate):
 
     def forward(self, data_dict):
         spatial_features_2d = data_dict['spatial_features_2d']
+        
+
 
         cls_preds = self.conv_cls(spatial_features_2d)
         box_preds = self.conv_box(spatial_features_2d)
@@ -49,6 +51,9 @@ class AnchorHeadSingle(AnchorHeadTemplate):
 
         self.forward_ret_dict['cls_preds'] = cls_preds
         self.forward_ret_dict['box_preds'] = box_preds
+        self.forward_ret_dict.update({'batch_reduce_pre':data_dict['batch_reduce_pre']})
+        self.forward_ret_dict.update({'batch_reduce_cls':data_dict['batch_reduce_cls']})
+
 
         if self.conv_dir_cls is not None:
             dir_cls_preds = self.conv_dir_cls(spatial_features_2d)

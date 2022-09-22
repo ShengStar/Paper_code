@@ -48,6 +48,8 @@ class PointPillarScatter(nn.Module):
         pillar_features, coords = batch_dict['pillar_features'], batch_dict['voxel_coords']
         
         batch_spatial_features = []
+        reduce_pre = []
+        reduce_cls = []
         batch_size = coords[:, 0].max().int().item() + 1
         for batch_idx in range(batch_size):
             spatial_feature = torch.zeros(
@@ -58,6 +60,7 @@ class PointPillarScatter(nn.Module):
             batch_mask = coords[:, 0] == batch_idx
             this_coords = coords[batch_mask, :] # 坐标
             flag_mask = this_coords[:,4] != -1
+            pillars_cls = this_coords[:,4]
             indices = this_coords[:, 1] + this_coords[:, 2] * self.nx + this_coords[:, 3] # torch.Size([8032])
             indices = indices.type(torch.long)
             # print(pillar_features.shape)
@@ -68,16 +71,41 @@ class PointPillarScatter(nn.Module):
 
             score = self.topk_score(pillars)
             score = self.nm_score(score)
-            score = self.rl_score(score)  
-
-            # print(pillars.shape)
+            score = self.rl_score(score).squeeze()
+            # print(score.shape)
+            # torch.topk(input, k, dim=None, largest=True, sorted=True, *, out=None)  
+            top_score,index= torch.topk(score,2048,largest=False)
+            mask = indices == indices
+            mask[index] = False
+            # print("1111111111")
+            # print(indices.shape)
+            indices = indices[mask]
+            # print(indices.shape)
             pillars = pillars.t()
-            indices = indices[flag_mask]
-            pillars = pillars[:,flag_mask] # 可能出错
+            pillars = pillars[:,mask]
             spatial_feature[:, indices] = pillars
             batch_spatial_features.append(spatial_feature)
+            pillars_cls = pillars_cls[index]
+            reduce_pre.append(top_score)
+            reduce_cls.append(pillars_cls)
 
+            # print(mask)
+
+            # indices[index] = 
+            # print(indices.shape)
+            # pillars = pillars.t()
+            # indices = indices[flag_mask]
+            # pillars = pillars[:,flag_mask] # 可能出错
+            # spatial_feature[:, indices] = pillars
+            # batch_spatial_features.append(spatial_feature)
+        
         batch_spatial_features = torch.stack(batch_spatial_features, 0)
+        batch_reduce_pre = torch.stack(reduce_pre, 0)
+        batch_reduce_cls = torch.stack(reduce_cls, 0)
         batch_spatial_features = batch_spatial_features.view(batch_size, self.num_bev_features * self.nz, self.ny, self.nx)
         batch_dict['spatial_features'] = batch_spatial_features
+        batch_dict.update({'batch_reduce_pre':batch_reduce_pre})
+        batch_dict.update({'batch_reduce_cls':batch_reduce_cls})
+
+
         return batch_dict
